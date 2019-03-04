@@ -93,6 +93,10 @@ public class DataTree {
     private final ConcurrentHashMap<String, DataNode> nodes =
         new ConcurrentHashMap<String, DataNode>();
 
+    private PriorityHash dataTreeCache;
+
+    private int cacheMaxSize = 5;
+
     private IWatchManager dataWatches;
 
     private IWatchManager childWatches;
@@ -180,9 +184,25 @@ public class DataTree {
     }
 
     public DataNode getNode(String path) {
-        return nodes.get(path);
+       /***************************************************
+        * CSCI 612 - Red team
+        *
+        * Get the node from cache if it's there
+        * Otherwise add it to the cache for later use.
+        ***************************************************/
+       if (dataTreeCache.contains(path)) {
+            return dataTreeCache.get(path);
+        } else {
+            dataTreeCache.set(path, nodes.get(path));
+            return dataTreeCache.get(path);
+        }
+     // return nodes.get(path);
     }
 
+    /**
+     * TODO: figure out where all this is used and if we should be keeping track of this after we get rid of hashmap
+     * @return number of nodes
+     */
     public int getNodeCount() {
         return nodes.size();
     }
@@ -201,7 +221,7 @@ public class DataTree {
 
     /**
      * Get the size of the nodes based on path and data length.
-     *
+     * TODO: update this with cache info?
      * @return size of the data
      */
     public long approximateDataSize() {
@@ -245,6 +265,10 @@ public class DataTree {
     private final DataNode quotaDataNode = new DataNode(new byte[0], -1L, new StatPersisted());
 
     public DataTree() {
+        /* Initialize cache */
+        //dataTreeCache = new PriorityHash(dataCacheSize > 0 ? dataCacheSize : cacheMaxSize);
+        dataTreeCache = new PriorityHash(cacheMaxSize);
+
         /* Rather than fight it, let root have an alias */
         nodes.put("", root);
         nodes.put(rootZookeeper, root);
@@ -259,6 +283,7 @@ public class DataTree {
         addConfigNode();
 
         nodeDataSize.set(approximateDataSize());
+
         try {
             dataWatches = WatchManagerFactory.createWatchManager();
             childWatches = WatchManagerFactory.createWatchManager();
@@ -274,7 +299,7 @@ public class DataTree {
      * zookeeper
      */
     public void addConfigNode() {
-        DataNode zookeeperZnode = nodes.get(procZookeeper);
+        DataNode zookeeperZnode = getNode(procZookeeper); //nodes.get(procZookeeper);
         if (zookeeperZnode != null) { // should always be the case
             zookeeperZnode.addChild(configChildZookeeper);
         } else {
@@ -344,7 +369,7 @@ public class DataTree {
      */
     public void updateCountBytes(String lastPrefix, long bytesDiff, int countDiff) {
         String statNode = Quotas.statPath(lastPrefix);
-        DataNode node = nodes.get(statNode);
+        DataNode node = getNode(statNode); //nodes.get(statNode);
 
         StatsTrack updatedStat = null;
         if (node == null) {
@@ -360,7 +385,7 @@ public class DataTree {
         }
         // now check if the counts match the quota
         String quotaNode = Quotas.quotaPath(lastPrefix);
-        node = nodes.get(quotaNode);
+        node = getNode(quotaNode); //nodes.get(quotaNode);
         StatsTrack thisStats = null;
         if (node == null) {
             // should not happen
@@ -442,7 +467,7 @@ public class DataTree {
         stat.setVersion(0);
         stat.setAversion(0);
         stat.setEphemeralOwner(ephemeralOwner);
-        DataNode parent = nodes.get(parentName);
+        DataNode parent = getNode(parentName); //nodes.get(parentName);
         if (parent == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -470,6 +495,11 @@ public class DataTree {
             parent.addChild(childName);
             nodeDataSize.addAndGet(getNodeSize(path, child.data));
             nodes.put(path, child);
+
+            /* Add new node to cache and update parent */
+            dataTreeCache.set(parentName, parent);
+            dataTreeCache.set(path, child);
+
             EphemeralType ephemeralType = EphemeralType.get(ephemeralOwner);
             if (ephemeralType == EphemeralType.CONTAINER) {
                 containers.add(path);
@@ -532,7 +562,11 @@ public class DataTree {
         // The child might already be deleted during taking fuzzy snapshot,
         // but we still need to update the pzxid here before throw exception
         // for no such child
-        DataNode parent = nodes.get(parentName);
+
+        /* Get from cache */
+        DataNode parent = getNode(parentName);
+        // DataNode parent = nodes.get(parentName);
+
         if (parent == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -544,13 +578,22 @@ public class DataTree {
             if (zxid > parent.stat.getPzxid()) {
                 parent.stat.setPzxid(zxid);
             }
+
+            /* Update parent in cache */
+            dataTreeCache.set(parentName, parent);
         }
 
-        DataNode node = nodes.get(path);
+        /* Get from cache */
+        DataNode node = getNode(path);
+        //DataNode node = nodes.get(path);
         if (node == null) {
             throw new KeeperException.NoNodeException();
         }
         nodes.remove(path);
+
+        /* remove node from cache */
+        dataTreeCache.remove(path);
+
         synchronized (node) {
             aclCache.removeUsage(node.acl);
             nodeDataSize.addAndGet(-getNodeSize(path, node.data));
@@ -605,10 +648,23 @@ public class DataTree {
                 EventType.NodeChildrenChanged);
     }
 
+    /**
+     * CSCI Red team
+     *
+     * Updated every instance of node.get(path) to use the getNode method which checks the cache first
+     * @param path
+     * @param data
+     * @param version
+     * @param zxid
+     * @param time
+     * @return
+     * @throws KeeperException.NoNodeException
+     */
     public Stat setData(String path, byte data[], int version, long zxid,
             long time) throws KeeperException.NoNodeException {
         Stat s = new Stat();
-        DataNode n = nodes.get(path);
+        DataNode n = getNode(path); //nodes.get(path);
+
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -620,6 +676,9 @@ public class DataTree {
             n.stat.setMzxid(zxid);
             n.stat.setVersion(version);
             n.copyStat(s);
+
+            /* add updated node to cache */
+            dataTreeCache.set(path, n);
         }
         // now update if the path is in a quota subtree.
         String lastPrefix = getMaxPrefixWithQuota(path);
@@ -655,7 +714,7 @@ public class DataTree {
 
     public byte[] getData(String path, Stat stat, Watcher watcher)
             throws KeeperException.NoNodeException {
-        DataNode n = nodes.get(path);
+        DataNode n = getNode(path); //nodes.get(path);
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -671,7 +730,7 @@ public class DataTree {
     public Stat statNode(String path, Watcher watcher)
             throws KeeperException.NoNodeException {
         Stat stat = new Stat();
-        DataNode n = nodes.get(path);
+        DataNode n = getNode(path); //nodes.get(path);
         if (watcher != null) {
             dataWatches.addWatch(path, watcher);
         }
@@ -686,7 +745,7 @@ public class DataTree {
 
     public List<String> getChildren(String path, Stat stat, Watcher watcher)
             throws KeeperException.NoNodeException {
-        DataNode n = nodes.get(path);
+        DataNode n = getNode(path); //nodes.get(path);
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -715,7 +774,8 @@ public class DataTree {
     public Stat setACL(String path, List<ACL> acl, int version)
             throws KeeperException.NoNodeException {
         Stat stat = new Stat();
-        DataNode n = nodes.get(path);
+        DataNode n = getNode(path); //nodes.get(path);
+
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -730,7 +790,7 @@ public class DataTree {
 
     public List<ACL> getACL(String path, Stat stat)
             throws KeeperException.NoNodeException {
-        DataNode n = nodes.get(path);
+        DataNode n = getNode(path); //nodes.get(path);
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -1240,6 +1300,7 @@ public class DataTree {
         aclCache.deserialize(ia);
         nodes.clear();
         pTrie.clear();
+        dataTreeCache.clear();
         nodeDataSize.set(0);
         String path = ia.readString("path");
         while (!"/".equals(path)) {
@@ -1254,7 +1315,7 @@ public class DataTree {
                 root = node;
             } else {
                 String parentPath = path.substring(0, lastSlash);
-                DataNode parent = nodes.get(parentPath);
+                DataNode parent = nodes.get(parentPath); //TODO: should we use cache here?
                 if (parent == null) {
                     throw new IOException("Invalid Datatree, unable to find " +
                             "parent " + parentPath + " of path " + path);
@@ -1443,7 +1504,7 @@ public class DataTree {
         if (path.endsWith("/")) {
            path = path.substring(0, path.length() - 1);
         }
-        DataNode node = nodes.get(path);
+        DataNode node = getNode(path); //nodes.get(path);
         if (node == null) {
             throw new KeeperException.NoNodeException(path);
         }
