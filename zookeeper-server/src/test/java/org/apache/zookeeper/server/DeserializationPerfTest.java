@@ -39,7 +39,7 @@ public class DeserializationPerfTest extends ZKTestCase {
         BinaryInputArchive ia;
         int count;
         {
-            DataTree tree = new DataTree();
+            DataTree tree = new DataTree(-1);
             SerializationPerfTest.createNodes(tree, "/", depth, width, tree.getNode("/").stat.getCversion(), new byte[len]);
             count = tree.getNodeCount();
 
@@ -52,7 +52,7 @@ public class DeserializationPerfTest extends ZKTestCase {
             ia = BinaryInputArchive.getArchive(bais);
         }
 
-        DataTree dserTree = new DataTree();
+        DataTree dserTree = new DataTree(-1);
 
         System.gc();
         long start = System.nanoTime();

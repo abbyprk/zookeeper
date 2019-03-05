@@ -104,7 +104,7 @@ public class SnapshotFormatter {
 
             FileSnap fileSnap = new FileSnap(null);
 
-            DataTree dataTree = new DataTree();
+            DataTree dataTree = new DataTree(-1);
             Map<Long, Integer> sessions = new HashMap<Long, Integer>();
 
             fileSnap.deserialize(dataTree, sessions, ia);

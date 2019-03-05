@@ -95,7 +95,7 @@ public class DataTree {
 
     private PriorityHash dataTreeCache;
 
-    private int cacheMaxSize = 5;
+    private double maxNodeDataCacheMB = .2;
 
     private IWatchManager dataWatches;
 
@@ -264,10 +264,9 @@ public class DataTree {
      */
     private final DataNode quotaDataNode = new DataNode(new byte[0], -1L, new StatPersisted());
 
-    public DataTree() {
+    public DataTree(int dataCacheSize) {
         /* Initialize cache */
-        //dataTreeCache = new PriorityHash(dataCacheSize > 0 ? dataCacheSize : cacheMaxSize);
-        dataTreeCache = new PriorityHash(cacheMaxSize);
+        dataTreeCache = new PriorityHash(dataCacheSize > 0 ? dataCacheSize : maxNodeDataCacheMB);
 
         /* Rather than fight it, let root have an alias */
         nodes.put("", root);

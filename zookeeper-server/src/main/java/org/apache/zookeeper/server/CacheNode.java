@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.zookeeper.server;
 
 public class CacheNode {
@@ -23,6 +22,8 @@ public class CacheNode {
     private String path;
     private long timestamp;
     private DataNode node;
+    private static final int TIMESTAMP_SIZE = 8;
+    private static final double MB_CONVERSION = 1048576;
 
     CacheNode(String path, DataNode node) {
         this.path = path;
@@ -50,10 +51,15 @@ public class CacheNode {
         this.node = node;
     }
 
-    //DataTree has a size calculation for nodes like this
-    int getSize() {
-        return 1;
-        //return (path == null ? 0 : path.length()) + (node.data == null ? 0 : node.data.length);
+    /**
+     * Gets the number of MB for the path, timestamp and data in the node
+     * We are ignoring the other fields on the DataNode.
+     */
+    double getSizeInMB() {
+        double pathSize = path == null ? 0 : path.getBytes().length;
+        double nodeDataSize = node == null || node.data == null ? 0 : node.data.length;
+        double sizeInBytes = pathSize + nodeDataSize + TIMESTAMP_SIZE;
+        return sizeInBytes / MB_CONVERSION;
     }
 
     @Override

@@ -30,15 +30,16 @@ public class PriorityHash {
 
     private final PriorityBlockingQueue<CacheNode> queue;
     private final ConcurrentHashMap<String, CacheNode> map;
-    private int size;
-    private int maxSize;
+    private double size;
+    private double maxSize;
+    private static final int QUEUE_INITIAL_CAPACITY = 20;
 
     //**********************************************//
     //                 CONSTRUCTORS                 //
     //**********************************************//
 
-    public PriorityHash(int maxSize) {
-        queue = new PriorityBlockingQueue<>(maxSize, Comparator.comparingLong(CacheNode::getTimestamp));
+    public PriorityHash(double maxSize) {
+        queue = new PriorityBlockingQueue<>(QUEUE_INITIAL_CAPACITY, Comparator.comparingLong(CacheNode::getTimestamp));
         map = new ConcurrentHashMap<>();
         size = 0;
         this.maxSize = maxSize;
@@ -68,21 +69,21 @@ public class PriorityHash {
      * @param path
      * @param node
      */
-    public void set(String path, DataNode node) {
+    public synchronized void set(String path, DataNode node) {
         CacheNode cacheNode = map.get(path);
         if (cacheNode != null) {
-            //TODO: make sure that the size of the new node doesn't exceed our cache size
-            //TODO: update the cache size after updating the node
+            //TODO: want to make sure that we don't go over the max size
+            //Need to make sure that we don't accidentally remove our node from the queue
             cacheNode.updateTimestamp();
             cacheNode.setNode(node);
         } else {
             cacheNode = new CacheNode(path, node);
-            if (size + cacheNode.getSize() > maxSize) {
+            if (size + cacheNode.getSizeInMB() > maxSize) {
                 removeLeastRecent();
             }
             map.put(path, cacheNode);
             queue.add(cacheNode);
-            size += cacheNode.getSize();
+            size += cacheNode.getSizeInMB();
         }
     }
 
@@ -94,23 +95,16 @@ public class PriorityHash {
         CacheNode cacheNode = map.get(path);
         map.remove(path);
         queue.remove(cacheNode);
-        size -= cacheNode.getSize();
+        size -= cacheNode.getSizeInMB();
     }
 
-    public synchronized void setMaxSize(int maxSize) {
-        this.maxSize = maxSize;
-        while (size > maxSize) {
-            removeLeastRecent();
-        }
-    }
-
-    public synchronized void clear() {
+    public void clear() {
         this.queue.clear();
         this.map.clear();
         this.size = 0;
     }
 
-    public int size() {
+    public double size() {
         return size;
     }
 
@@ -121,6 +115,6 @@ public class PriorityHash {
     private synchronized void removeLeastRecent() {
         CacheNode cacheNode = queue.remove();
         map.remove(cacheNode.getPath(), cacheNode);
-        size -= cacheNode.getSize();
+        size -= cacheNode.getSizeInMB();
     }
 }

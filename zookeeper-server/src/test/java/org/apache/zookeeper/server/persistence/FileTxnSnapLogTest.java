@@ -185,7 +185,7 @@ public class FileTxnSnapLogTest {
 
         FileTxnSnapLog fileTxnSnapLog = createFileTxnSnapLogWithAutoCreateDB(dataDir, snapDir, autoCreateValue);
 
-        long zxid = fileTxnSnapLog.restore(new DataTree(), sessions, new FileTxnSnapLog.PlayBackListener() {
+        long zxid = fileTxnSnapLog.restore(new DataTree(-1), sessions, new FileTxnSnapLog.PlayBackListener() {
             @Override
             public void onTxnLoaded(TxnHeader hdr, Record rec) {
                 // empty by default

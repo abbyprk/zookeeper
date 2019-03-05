@@ -20,13 +20,9 @@ package org.apache.zookeeper.server;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
@@ -75,6 +71,9 @@ public class ZKDatabase {
     protected FileTxnSnapLog snapLog;
     protected long minCommittedLog, maxCommittedLog;
 
+    /* Use default if the cache size is not set */
+    protected int dataCacheSize = -1;
+
     /**
      * Default value is to use snapshot if txnlog size exceeds 1/3 the size of snapshot
      */
@@ -95,6 +94,24 @@ public class ZKDatabase {
      * @param snapLog the FileTxnSnapLog mapping this zkdatabase
      */
     public ZKDatabase(FileTxnSnapLog snapLog) {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        Properties props = new Properties();
+
+        try{
+            InputStream resourceStream = loader.getResourceAsStream("dataCache.properties");
+            LOG.error("Loaded resourceSTream");
+
+            props.load(resourceStream);
+            LOG.error("Loaded resourceSTream into props");
+            dataCacheSize = Integer.parseInt(props.getProperty("dataCacheSize"));
+        } catch (IOException e) {
+            LOG.error("There was a problem reading the dataCache.properties file. Continue with the default");
+        } catch (NumberFormatException ne) {
+            LOG.error("There was a problem reading the dataCacheSize property. Continue with the default");
+        } catch (Exception e) {
+            LOG.error("There was an unexpected problem: " + e.getMessage());
+        }
+
         dataTree = createDataTree();
         sessionsWithTimeouts = new ConcurrentHashMap<Long, Integer>();
         this.snapLog = snapLog;
@@ -667,6 +684,6 @@ public class ZKDatabase {
 
     // visible for testing
     public DataTree createDataTree() {
-        return new DataTree();
+        return new DataTree(dataCacheSize);
     }
 }

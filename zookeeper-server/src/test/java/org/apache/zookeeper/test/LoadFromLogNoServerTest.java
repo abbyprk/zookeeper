@@ -58,7 +58,7 @@ public class LoadFromLogNoServerTest extends ZKTestCase {
         long count = 1;
         File tmpDir = ClientBase.createTmpDir();
         FileTxnSnapLog logFile = new FileTxnSnapLog(tmpDir, tmpDir);
-        DataTree dt = new DataTree();
+        DataTree dt = new DataTree(-1);
         dt.createNode("/test", new byte[0], null, 0, -1, 1, 1);
         for (count = 1; count <= 3; count++) {
             dt.createNode("/test/" + count, new byte[0], null, 0, -1, count,

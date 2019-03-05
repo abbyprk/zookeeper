@@ -64,7 +64,7 @@ public class EmptySnapshotTest {
         Assert.assertEquals(0,
                 ((FileSnap) snapLog.snapLog).findNRecentSnapshots(10).size());
 
-        DataTree tree = new DataTree();
+        DataTree tree = new DataTree(-1);
         tree.createNode("/empty-snapshot-test-1", "data".getBytes(), null, -1,
                        -1, 1, 1);
         try {
