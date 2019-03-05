@@ -17,13 +17,16 @@
  */
 package org.apache.zookeeper.server;
 
-public class CacheNode {
+import java.io.Serializable;
+
+public class CacheNode implements Serializable {
 
     private String path;
     private long timestamp;
     private DataNode node;
     private static final int TIMESTAMP_SIZE = 8;
     private static final double MB_CONVERSION = 1048576;
+    private static final long serialVersionUID = -11111111;
 
     CacheNode(String path, DataNode node) {
         this.path = path;
