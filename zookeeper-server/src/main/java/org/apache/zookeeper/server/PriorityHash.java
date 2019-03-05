@@ -43,6 +43,8 @@ public class PriorityHash {
         map = new ConcurrentHashMap<>();
         size = 0;
         this.maxSize = maxSize;
+
+        map
     }
 
     //**********************************************//
@@ -117,4 +119,18 @@ public class PriorityHash {
         map.remove(cacheNode.getPath(), cacheNode);
         size -= cacheNode.getSizeInMB();
     }
+
+    /**
+     * Method for getting an item that doesn't exist in the cache
+     *
+     * 1. Deserialize the uncached (on file) hashmap
+     * 2. Remove the least recently used node from the cache and put it in the "uncached" hashmap
+     * 3. Lookup node in the "uncached" hashmap and add it to the cache
+     * 4. Serialize the "uncached" hashmap back to file.
+     *
+     * Make sure to add checks around nodes missing from "uncached" hashmap
+     * Make sure I/O is synchronized
+     *
+     * In DataTree.getNode -> remove code that looks at datatree's hashmap
+     */
 }
