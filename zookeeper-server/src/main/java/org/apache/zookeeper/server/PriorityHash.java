@@ -43,8 +43,6 @@ public class PriorityHash {
         map = new ConcurrentHashMap<>();
         size = 0;
         this.maxSize = maxSize;
-
-        map
     }
 
     //**********************************************//
