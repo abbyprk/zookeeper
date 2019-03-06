@@ -16,6 +16,11 @@
  * limitations under the License.
  */
 
+ /*
+FOR REDTEAM
+Find places to replace native concurrent HashMap with PriorityHash : REPLACE_WITH_PH
+ */
+
 package org.apache.zookeeper.server;
 
 import org.apache.jute.InputArchive;
@@ -193,7 +198,7 @@ public class DataTree {
        if (dataTreeCache.contains(path)) {
             return dataTreeCache.get(path);
         } else {
-            dataTreeCache.set(path, nodes.get(path));
+            dataTreeCache.set(path, nodes.get(path)); // <--- REPLACE_WITH_PH
             return dataTreeCache.get(path);
         }
      // return nodes.get(path);
@@ -204,7 +209,7 @@ public class DataTree {
      * @return number of nodes
      */
     public int getNodeCount() {
-        return nodes.size();
+        return nodes.size(); // <--- REPLACE_WITH_PH
     }
 
     public int getWatchCount() {
@@ -226,7 +231,7 @@ public class DataTree {
      */
     public long approximateDataSize() {
         long result = 0;
-        for (Map.Entry<String, DataNode> entry : nodes.entrySet()) {
+        for (Map.Entry<String, DataNode> entry : nodes.entrySet()) { // <--- REPLACE_WITH_PH
             DataNode value = entry.getValue();
             synchronized (value) {
                 result += getNodeSize(entry.getKey(), value.data);
@@ -305,7 +310,7 @@ public class DataTree {
             assert false : "There's no /zookeeper znode - this should never happen.";
         }
 
-        nodes.put(configZookeeper, new DataNode(new byte[0], -1L, new StatPersisted()));
+        nodes.put(configZookeeper, new DataNode(new byte[0], -1L, new StatPersisted())); // <--- REPLACE_WITH_PH
         try {
             // Reconfig node is access controlled by default (ZOOKEEPER-2014).
             setACL(configZookeeper, ZooDefs.Ids.READ_ACL_UNSAFE, -1);
@@ -493,7 +498,7 @@ public class DataTree {
             DataNode child = new DataNode(data, longval, stat);
             parent.addChild(childName);
             nodeDataSize.addAndGet(getNodeSize(path, child.data));
-            nodes.put(path, child);
+            nodes.put(path, child); // <--- REPLACE_WITH_PH
 
             /* Add new node to cache and update parent */
             dataTreeCache.set(parentName, parent);
@@ -588,7 +593,7 @@ public class DataTree {
         if (node == null) {
             throw new KeeperException.NoNodeException();
         }
-        nodes.remove(path);
+        nodes.remove(path); // <--- REPLACE_WITH_PH
 
         /* remove node from cache */
         dataTreeCache.remove(path);
@@ -764,10 +769,10 @@ public class DataTree {
     public int getAllChildrenNumber(String path) {
         //cull out these two keys:"", "/"
         if ("/".equals(path)) {
-            return nodes.size() - 2;
+            return nodes.size() - 2; // <--- REPLACE_WITH_PH
         }
 
-        return (int)nodes.keySet().parallelStream().filter(key -> key.startsWith(path + "/")).count();
+        return (int)nodes.keySet().parallelStream().filter(key -> key.startsWith(path + "/")).count(); // <--- REPLACE_WITH_PH
     }
 
     public Stat setACL(String path, List<ACL> acl, int version)
@@ -1295,7 +1300,7 @@ public class DataTree {
         }
     }
 
-    public void deserialize(InputArchive ia, String tag) throws IOException {
+    public void deserialize(InputArchive ia, String tag) throws IOException { // <--- REPLACE_WITH_PH
         aclCache.deserialize(ia);
         nodes.clear();
         pTrie.clear();
