@@ -99,7 +99,7 @@ public class DataTree {
      */
     private PriorityHash dataTreeCache;
 
-    private double maxNodeDataCacheMB = .2; //RED TEAM - default cache size
+    private double maxNodeDataCacheMB = .1; //RED TEAM - default cache size
 
     private int nodeCount = 0; //RED TEAM - keeps track of the actual number of nodes in the system
 

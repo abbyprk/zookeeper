@@ -158,10 +158,15 @@ public class PriorityHash {
     //**********************************************//
 
     private synchronized CacheNode removeLeastRecent() {
-        CacheNode cacheNodeToRemove = queue.remove();
-        map.remove(cacheNodeToRemove.getPath(), cacheNodeToRemove);
-        size -= cacheNodeToRemove.getSizeInMB();
-        return cacheNodeToRemove;
+        try {
+            CacheNode cacheNodeToRemove = queue.remove();
+            map.remove(cacheNodeToRemove.getPath(), cacheNodeToRemove);
+            size -= cacheNodeToRemove.getSizeInMB();
+            return cacheNodeToRemove;
+        } catch (Exception e) {
+            LOG.error("There was a problem with removing the least recently used item from the queue. Error: " + e.getMessage());
+            return null;
+        }
     }
 
     /**

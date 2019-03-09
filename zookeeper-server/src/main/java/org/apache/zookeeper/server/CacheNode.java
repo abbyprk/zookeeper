@@ -60,7 +60,7 @@ public class CacheNode implements Serializable {
     double getSizeInMB() {
         double pathSize = path == null ? 0 : path.getBytes().length;
         double nodeDataSize = node == null || node.data == null ? 0 : node.data.length;
-        return pathSize + nodeDataSize / MB_CONVERSION;
+        return (pathSize + nodeDataSize) / MB_CONVERSION;
     }
 
     @Override
