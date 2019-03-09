@@ -20,6 +20,7 @@ package org.apache.zookeeper.server;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Collections;
@@ -27,8 +28,10 @@ import java.util.Collections;
 import org.apache.jute.InputArchive;
 import org.apache.jute.OutputArchive;
 import org.apache.jute.Record;
+import org.apache.zookeeper.StatPersistedSerializable;
 import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.data.StatPersisted;
+
 
 /**
  * This class contains the data for a node in the data tree.
@@ -38,7 +41,7 @@ import org.apache.zookeeper.data.StatPersisted;
  * 
  */
 @SuppressFBWarnings("EI_EXPOSE_REP2")
-public class DataNode implements Record {
+public class DataNode implements Record, Serializable {
     /** the data for this datanode */
     byte data[];
 
@@ -50,16 +53,16 @@ public class DataNode implements Record {
     /**
      * the stat for this node that is persisted to disk.
      */
-    public StatPersisted stat;
+    public StatPersistedSerializable stat;
 
     /**
      * the list of children for this node. note that the list of children string
      * does not contain the parent path -- just the last part of the path. This
      * should be synchronized on except deserializing (for speed up issues).
      */
-    private Set<String> children = null;
+    private HashSet<String> children = null; //Red Team: Change to hashset so that it will be serializable
 
-    private static final Set<String> EMPTY_SET = Collections.emptySet();
+    private static final HashSet<String> EMPTY_SET = new HashSet<>(); //Red Team: change to hashset so that it will be serializable
 
     /**
      * default constructor for the datanode
@@ -80,7 +83,7 @@ public class DataNode implements Record {
      * @param stat
      *            the stat for this node.
      */
-    public DataNode(byte data[], Long acl, StatPersisted stat) {
+    public DataNode(byte data[], Long acl, StatPersistedSerializable stat) {
         this.data = data;
         this.acl = acl;
         this.stat = stat;
@@ -171,7 +174,7 @@ public class DataNode implements Record {
         archive.startRecord("node");
         data = archive.readBuffer("data");
         acl = archive.readLong("acl");
-        stat = new StatPersisted();
+        stat = new StatPersistedSerializable();
         stat.deserialize(archive, "statpersisted");
         archive.endRecord("node");
     }

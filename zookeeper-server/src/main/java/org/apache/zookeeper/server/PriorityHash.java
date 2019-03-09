@@ -22,10 +22,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Comparator;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -48,7 +46,8 @@ public class PriorityHash {
     private enum ActivityType {
         GET_NODE_FROM_FILE_ADD_TO_CACHE,
         ADD_NEW_NODE_TO_CACHE,
-        ADD_NODE_TO_FILE
+        ADD_NODE_TO_FILE,
+        REMOVE_NODE_FROM_FILE
     }
 
     //**********************************************//
@@ -80,6 +79,7 @@ public class PriorityHash {
 
     public synchronized DataNode get(String path) {
         CacheNode cacheNode = map.get(path);
+        LOG.warn("Current cache size: " + size);
 
         //If we don't have the node in cache, look it up in file and add it to cache
         if (cacheNode == null) {
@@ -132,9 +132,14 @@ public class PriorityHash {
      */
     public void remove(String path) {
         CacheNode cacheNode = map.get(path);
-        map.remove(path);
-        queue.remove(cacheNode);
-        size -= cacheNode.getSizeInMB();
+
+        if (cacheNode == null) {
+          processCacheDataRequest(path, null, ActivityType.REMOVE_NODE_FROM_FILE);
+        } else {
+            map.remove(path);
+            queue.remove(cacheNode);
+            size -= cacheNode.getSizeInMB();
+        }
     }
 
     public void clear() {
@@ -170,27 +175,19 @@ public class PriorityHash {
     }
 
     /**
-     * Method for getting an item that doesn't exist in the cache
+     * ProcessCacheDataRequest
      *
-     * 1. Deserialize the uncached (on file) hashmap
-     * 2. Remove the least recently used node from the cache and put it in the "uncached" hashmap
-     * 3. Lookup node in the "uncached" hashmap and add it to the cache
-     * 4. Remove the node from the "uncached" hashmap so that it will not appear in both places
-     * 4. Serialize the "uncached" hashmap back to file.
-     *
-     * Make sure to add checks around nodes missing from "uncached" hashmap
-     * Make sure I/O is synchronized
-     *
-     * In DataTree.getNode -> remove code that looks at datatree's hashmap
-     */
-
-    /**
      * Scenarios:
-     * 1. write node to file do not bring node into cache
-     * 2. get node from file and store in cache, do not put a different node into cache
-     * 3. get a node from file and swap it with one in cache
+     * 1. Write node to file do not bring node into cache
+     * 2. Get node from file and store in cache, do not put a different node into cache
+     * 3. Get a node from file and swap it with one in cache
+     * 4. Delete a node from the file which wasn't in cache
      *
      * Actual reads/writes from file must be synchronized so that no one else can get in
+     *
+     * @param path - path to the node
+     * @param nodeToSave - the node we want to save to file (or null)
+     * @param activityType - The type of action that we are performing
      */
      private synchronized void processCacheDataRequest(String path, DataNode nodeToSave, ActivityType activityType) {
          ConcurrentHashMap<String, CacheNode> fileCacheMap;
@@ -212,6 +209,7 @@ public class PriorityHash {
                          if (nodeToSave != null) {
                              fileCacheMap.put(path, new CacheNode(path, nodeToSave));
                              ObjectSerializer.serialize(cacheFilePath, fileCacheMap);
+                             LOG.info("Writing node to file because we have decided to store it directly to the file rather than in cache");
                          }
                          break;
                      case ADD_NEW_NODE_TO_CACHE:
@@ -225,6 +223,7 @@ public class PriorityHash {
                                  CacheNode removedNode = removeLeastRecent();
                                  fileCacheMap.put(removedNode.getPath(), removedNode);
                                  cacheFull = size + cacheNode.getSizeInMB() > maxSize;
+                                 LOG.info("Cache was full, I deleted a node with path " + removedNode.getPath() + "... Current size is: " + size);
                              }
 
                              //Now we can add the node to cache
@@ -232,6 +231,7 @@ public class PriorityHash {
                              queue.add(cacheNode);
                              size += cacheNode.getSizeInMB();
                              ObjectSerializer.serialize(cacheFilePath, fileCacheMap);  //write out our updated fileCacheMap
+                             LOG.error("I added a new node to cache with path " + cacheNode.getPath());
                          }
                          break;
                      case GET_NODE_FROM_FILE_ADD_TO_CACHE:
@@ -255,12 +255,24 @@ public class PriorityHash {
                              size += fileCacheNode.getSizeInMB();
 
                              //Remove the node that we're caching from the fileCacheMap and then write the updated map to file
-                             fileCacheMap.remove(fileCacheNode);
+                             fileCacheMap.remove(path, fileCacheNode);
+                             ObjectSerializer.serialize(cacheFilePath, fileCacheMap);
+
+                             LOG.info("There was a cache miss. I just got the node " + fileCacheNode.getPath() + " from file and put it in cache");
+                         } else {
+                             LOG.warn("Could not find the requested node in cache or in the file.");
+                         }
+                         break;
+                     case REMOVE_NODE_FROM_FILE:
+                         if (fileCacheNode != null) {
+                             fileCacheMap.remove(path, fileCacheNode);
                              ObjectSerializer.serialize(cacheFilePath, fileCacheMap);
                          } else {
                              LOG.warn("Could not find the requested node in cache or in the file.");
                          }
                          break;
+                     default:
+                         LOG.warn("Unsupported cache action was called.");
                  }
              }
          }  catch (IOException e) {

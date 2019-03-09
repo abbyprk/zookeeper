@@ -26,19 +26,14 @@ package org.apache.zookeeper.server;
 import org.apache.jute.InputArchive;
 import org.apache.jute.OutputArchive;
 import org.apache.jute.Record;
-import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.*;
 import org.apache.zookeeper.KeeperException.Code;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
-import org.apache.zookeeper.Quotas;
-import org.apache.zookeeper.StatsTrack;
-import org.apache.zookeeper.WatchedEvent;
-import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.Watcher.Event;
 import org.apache.zookeeper.Watcher.Event.EventType;
 import org.apache.zookeeper.Watcher.Event.KeeperState;
 import org.apache.zookeeper.Watcher.WatcherType;
-import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.PathTrie;
 import org.apache.zookeeper.data.ACL;
@@ -78,7 +73,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.LongUnaryOperator;
 
 /**
  * This class maintains the tree data structure. It doesn't have any networking
@@ -258,18 +252,18 @@ public class DataTree {
      * This is a pointer to the root of the DataTree. It is the source of truth,
      * but we usually use the nodes hashmap to find nodes in the tree.
      */
-    private DataNode root = new DataNode(new byte[0], -1L, new StatPersisted());
+    private DataNode root = new DataNode(new byte[0], -1L, new StatPersistedSerializable());
 
     /**
      * create a /zookeeper filesystem that is the proc filesystem of zookeeper
      */
-    private final DataNode procDataNode = new DataNode(new byte[0], -1L, new StatPersisted());
+    private final DataNode procDataNode = new DataNode(new byte[0], -1L, new StatPersistedSerializable());
 
     /**
      * create a /zookeeper/quota node for maintaining quota properties for
      * zookeeper
      */
-    private final DataNode quotaDataNode = new DataNode(new byte[0], -1L, new StatPersisted());
+    private final DataNode quotaDataNode = new DataNode(new byte[0], -1L, new StatPersistedSerializable());
 
     public DataTree() {
         this(-1); //Will use the default maxNodeDataCache
@@ -331,7 +325,7 @@ public class DataTree {
         /**
          * Red Team - config child node to cache and update nodeDataSize
          */
-        DataNode configChildZKNode = new DataNode(new byte[0], -1L, new StatPersisted());
+        DataNode configChildZKNode = new DataNode(new byte[0], -1L, new StatPersistedSerializable());
         dataTreeCache.set(configChildZookeeper, configChildZKNode, true);
         nodeDataSize.addAndGet(getNodeSize(configChildZookeeper, configChildZKNode.data));
         nodeCount++;
@@ -487,7 +481,7 @@ public class DataTree {
         int lastSlash = path.lastIndexOf('/');
         String parentName = path.substring(0, lastSlash);
         String childName = path.substring(lastSlash + 1);
-        StatPersisted stat = new StatPersisted();
+        StatPersistedSerializable stat = new StatPersistedSerializable();
         stat.setCtime(time);
         stat.setMtime(time);
         stat.setCzxid(zxid);
@@ -1295,7 +1289,7 @@ public class DataTree {
         String children[] = null;
         DataNode nodeCopy;
         synchronized (node) {
-            StatPersisted statCopy = new StatPersisted();
+            StatPersistedSerializable statCopy = new StatPersistedSerializable();
             copyStatPersisted(node.stat, statCopy);
             //we do not need to make a copy of node.data because the contents
             //are never changed
