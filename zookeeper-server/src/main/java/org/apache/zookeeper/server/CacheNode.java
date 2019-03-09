@@ -24,7 +24,6 @@ public class CacheNode implements Serializable {
     private String path;
     private long timestamp;
     private DataNode node;
-    private static final int TIMESTAMP_SIZE = 8;
     private static final double MB_CONVERSION = 1048576;
     private static final long serialVersionUID = -11111111;
 
@@ -55,14 +54,13 @@ public class CacheNode implements Serializable {
     }
 
     /**
-     * Gets the number of MB for the path, timestamp and data in the node
+     * Gets the number of MB for the path and data in the D
      * We are ignoring the other fields on the DataNode.
      */
     double getSizeInMB() {
         double pathSize = path == null ? 0 : path.getBytes().length;
         double nodeDataSize = node == null || node.data == null ? 0 : node.data.length;
-        double sizeInBytes = pathSize + nodeDataSize + TIMESTAMP_SIZE;
-        return sizeInBytes / MB_CONVERSION;
+        return pathSize + nodeDataSize / MB_CONVERSION;
     }
 
     @Override

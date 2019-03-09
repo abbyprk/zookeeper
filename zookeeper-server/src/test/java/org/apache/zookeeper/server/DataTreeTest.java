@@ -58,7 +58,7 @@ public class DataTreeTest extends ZKTestCase {
 
     @Before
     public void setUp() throws Exception {
-        dt=new DataTree(-1);
+        dt=new DataTree();
     }
 
     @After
@@ -75,7 +75,7 @@ public class DataTreeTest extends ZKTestCase {
         int count = 1000;
         long session = 1000;
         long zxid = 2000;
-        final DataTree dataTree = new DataTree(-1);
+        final DataTree dataTree = new DataTree();
         LOG.info("Create {} zkclient sessions and its ephemeral nodes", count);
         createEphemeralNode(session, dataTree, count);
         final AtomicBoolean exceptionDuringDumpEphemerals = new AtomicBoolean(
@@ -198,7 +198,7 @@ public class DataTreeTest extends ZKTestCase {
     public void testPathTrieClearOnDeserialize() throws Exception {
 
         //Create a DataTree with quota nodes so PathTrie get updated
-        DataTree dserTree = new DataTree(-1);
+        DataTree dserTree = new DataTree();
 
         dserTree.createNode("/bug", new byte[20], null, -1, 1, 1, 1);
         dserTree.createNode(Quotas.quotaZookeeper+"/bug", null, null, -1, 1, 1, 1);
@@ -206,7 +206,7 @@ public class DataTreeTest extends ZKTestCase {
         dserTree.createNode(Quotas.statPath("/bug"), new byte[20], null, -1, 1, 1, 1);
 
         //deserialize a DataTree; this should clear the old /bug nodes and pathTrie
-        DataTree tree = new DataTree(-1);
+        DataTree tree = new DataTree();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         BinaryOutputArchive oa = BinaryOutputArchive.getArchive(baos);
@@ -235,7 +235,7 @@ public class DataTreeTest extends ZKTestCase {
      */
     @Test(timeout = 60000)
     public void testSerializeDoesntLockDataNodeWhileWriting() throws Exception {
-        DataTree tree = new DataTree(-1);
+        DataTree tree = new DataTree();
         tree.createNode("/marker", new byte[] {42}, null, -1, 1, 1, 1);
         final DataNode markerNode = tree.getNode("/marker");
         final AtomicBoolean ranTestCase = new AtomicBoolean();
@@ -284,7 +284,7 @@ public class DataTreeTest extends ZKTestCase {
     @Test(timeout = 60000)
     public void testReconfigACLClearOnDeserialize() throws Exception {
 
-        DataTree tree = new DataTree(-1);
+        DataTree tree = new DataTree();
         // simulate the upgrading scenario, where the reconfig znode
         // doesn't exist and the acl cache is empty
         tree.deleteNode(ZooDefs.CONFIG_NODE, 1);
@@ -325,7 +325,7 @@ public class DataTreeTest extends ZKTestCase {
 
     @Test
     public void testCachedApproximateDataSize() throws Exception {
-        DataTree dt = new DataTree(-1);
+        DataTree dt = new DataTree();
         long initialSize = dt.approximateDataSize();
         Assert.assertEquals(dt.cachedApproximateDataSize(), dt.approximateDataSize());
 
@@ -345,7 +345,7 @@ public class DataTreeTest extends ZKTestCase {
 
     @Test
     public void testGetAllChildrenNumber() throws Exception {
-        DataTree dt = new DataTree(-1);
+        DataTree dt = new DataTree();
         // create a node
         dt.createNode("/all_children_test", new byte[20], null, -1, 1, 1, 1);
         dt.createNode("/all_children_test/nodes", new byte[20], null, -1, 1, 1, 1);

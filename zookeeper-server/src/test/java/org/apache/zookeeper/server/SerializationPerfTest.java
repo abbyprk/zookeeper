@@ -58,7 +58,7 @@ public class SerializationPerfTest extends ZKTestCase {
 
     private static void serializeTree(int depth, int width, int len)
             throws InterruptedException, IOException, KeeperException.NodeExistsException, KeeperException.NoNodeException {
-        DataTree tree = new DataTree(-1);
+        DataTree tree = new DataTree();
         createNodes(tree, "/", depth, width, tree.getNode("/").stat.getCversion(), new byte[len]);
         int count = tree.getNodeCount();
 

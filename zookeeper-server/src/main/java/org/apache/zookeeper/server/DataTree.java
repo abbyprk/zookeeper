@@ -78,6 +78,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongUnaryOperator;
 
 /**
  * This class maintains the tree data structure. It doesn't have any networking
@@ -92,15 +93,15 @@ public class DataTree {
     private static final Logger LOG = LoggerFactory.getLogger(DataTree.class);
 
     /**
-     * This hashtable provides a fast lookup to the datanodes. The tree is the
-     * source of truth and is where all the locking occurs
+     * CSCI Red Team
+     * Replaced the existing ConcurrentHashMap with our PriorityHash caching solution.
+     * Nodes that used to be found in the HashMap are now managed by our PriorityHash cache
      */
-    private final ConcurrentHashMap<String, DataNode> nodes =
-        new ConcurrentHashMap<String, DataNode>();
-
     private PriorityHash dataTreeCache;
 
-    private double maxNodeDataCacheMB = .2;
+    private double maxNodeDataCacheMB = .2; //RED TEAM - default cache size
+
+    private int nodeCount = 0; //RED TEAM - keeps track of the actual number of nodes in the system
 
     private IWatchManager dataWatches;
 
@@ -188,28 +189,27 @@ public class DataTree {
         return ephemerals.keySet();
     }
 
+    /**
+     * Red Team
+     *
+     * This method was updated to get the node from the dataTreeCache
+     * @param path
+     * @return
+     */
     public DataNode getNode(String path) {
-       /***************************************************
-        * CSCI 612 - Red team
-        *
-        * Get the node from cache if it's there
-        * Otherwise add it to the cache for later use.
-        ***************************************************/
-       if (dataTreeCache.contains(path)) {
-            return dataTreeCache.get(path);
-        } else {
-            dataTreeCache.set(path, nodes.get(path)); // <--- REPLACE_WITH_PH
-            return dataTreeCache.get(path);
-        }
-     // return nodes.get(path);
+        return dataTreeCache.get(path);
     }
 
     /**
-     * TODO: figure out where all this is used and if we should be keeping track of this after we get rid of hashmap
+     * Red Team
+     *
+     * This was updated to return the actual number of data nodes in the system
+     * rather than the number of nodes in cache
+     *
      * @return number of nodes
      */
     public int getNodeCount() {
-        return nodes.size(); // <--- REPLACE_WITH_PH
+        return nodeCount;
     }
 
     public int getWatchCount() {
@@ -225,19 +225,21 @@ public class DataTree {
     }
 
     /**
-     * Get the size of the nodes based on path and data length.
-     * TODO: update this with cache info?
+     * Red Team
+     *
+     * We are keeping track of the data size instead of calculating it each time.
      * @return size of the data
      */
-    public long approximateDataSize() {
-        long result = 0;
+   public long approximateDataSize() {
+        return cachedApproximateDataSize();
+        /*long result = 0;
         for (Map.Entry<String, DataNode> entry : nodes.entrySet()) { // <--- REPLACE_WITH_PH
             DataNode value = entry.getValue();
             synchronized (value) {
                 result += getNodeSize(entry.getKey(), value.data);
             }
         }
-        return result;
+        return result;*/
     }
 
     /**
@@ -269,25 +271,41 @@ public class DataTree {
      */
     private final DataNode quotaDataNode = new DataNode(new byte[0], -1L, new StatPersisted());
 
+    public DataTree() {
+        this(-1); //Will use the default maxNodeDataCache
+    }
+
     public DataTree(int dataCacheSize) {
         /* Initialize cache */
         dataTreeCache = new PriorityHash(dataCacheSize > 0 ? dataCacheSize : maxNodeDataCacheMB);
 
+        /**
+         * RED Team
+         *
+         * Update to use cache instead of nodes
+         * Update the nodeDataSize as we add the nodes
+         */
+
         /* Rather than fight it, let root have an alias */
-        nodes.put("", root);
-        nodes.put(rootZookeeper, root);
+        dataTreeCache.set("", root, true);
+        nodeDataSize.set(getNodeSize("", root.data));
+
+        dataTreeCache.set(rootZookeeper, root, true);
+        nodeDataSize.addAndGet(getNodeSize(rootZookeeper, root.data));
+        nodeCount+= 2;
 
         /** add the proc node and quota node */
         root.addChild(procChildZookeeper);
-        nodes.put(procZookeeper, procDataNode);
+        dataTreeCache.set(procZookeeper, procDataNode, true);
+        nodeDataSize.addAndGet(getNodeSize(procChildZookeeper, procDataNode.data));
+        nodeCount++;
 
         procDataNode.addChild(quotaChildZookeeper);
-        nodes.put(quotaZookeeper, quotaDataNode);
+        dataTreeCache.set(quotaZookeeper, quotaDataNode, true);
+        nodeDataSize.addAndGet(getNodeSize(quotaZookeeper, quotaDataNode.data));
+        nodeCount++;
 
         addConfigNode();
-
-        nodeDataSize.set(approximateDataSize());
-
         try {
             dataWatches = WatchManagerFactory.createWatchManager();
             childWatches = WatchManagerFactory.createWatchManager();
@@ -310,7 +328,14 @@ public class DataTree {
             assert false : "There's no /zookeeper znode - this should never happen.";
         }
 
-        nodes.put(configZookeeper, new DataNode(new byte[0], -1L, new StatPersisted())); // <--- REPLACE_WITH_PH
+        /**
+         * Red Team - config child node to cache and update nodeDataSize
+         */
+        DataNode configChildZKNode = new DataNode(new byte[0], -1L, new StatPersisted());
+        dataTreeCache.set(configChildZookeeper, configChildZKNode, true);
+        nodeDataSize.addAndGet(getNodeSize(configChildZookeeper, configChildZKNode.data));
+        nodeCount++;
+
         try {
             // Reconfig node is access controlled by default (ZOOKEEPER-2014).
             setACL(configZookeeper, ZooDefs.Ids.READ_ACL_UNSAFE, -1);
@@ -373,7 +398,7 @@ public class DataTree {
      */
     public void updateCountBytes(String lastPrefix, long bytesDiff, int countDiff) {
         String statNode = Quotas.statPath(lastPrefix);
-        DataNode node = getNode(statNode); //nodes.get(statNode);
+        DataNode node = getNode(statNode); //Red Team - get node from cache
 
         StatsTrack updatedStat = null;
         if (node == null) {
@@ -389,7 +414,7 @@ public class DataTree {
         }
         // now check if the counts match the quota
         String quotaNode = Quotas.quotaPath(lastPrefix);
-        node = getNode(quotaNode); //nodes.get(quotaNode);
+        node = getNode(quotaNode); //Red Team - get node from cache
         StatsTrack thisStats = null;
         if (node == null) {
             // should not happen
@@ -471,7 +496,7 @@ public class DataTree {
         stat.setVersion(0);
         stat.setAversion(0);
         stat.setEphemeralOwner(ephemeralOwner);
-        DataNode parent = getNode(parentName); //nodes.get(parentName);
+        DataNode parent = getNode(parentName); //Red Team - get node from cache
         if (parent == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -498,11 +523,15 @@ public class DataTree {
             DataNode child = new DataNode(data, longval, stat);
             parent.addChild(childName);
             nodeDataSize.addAndGet(getNodeSize(path, child.data));
-            nodes.put(path, child); // <--- REPLACE_WITH_PH
 
-            /* Add new node to cache and update parent */
-            dataTreeCache.set(parentName, parent);
-            dataTreeCache.set(path, child);
+            /** RED Team
+             * - add node to dataTreeCache
+             * - update parent
+             * - Add to total size and node count
+             * **/
+            dataTreeCache.set(parentName, parent, true);
+            dataTreeCache.set(path, child, true);
+            nodeCount++;
 
             EphemeralType ephemeralType = EphemeralType.get(ephemeralOwner);
             if (ephemeralType == EphemeralType.CONTAINER) {
@@ -557,8 +586,7 @@ public class DataTree {
      *            the current zxid
      * @throws KeeperException.NoNodeException
      */
-    public void deleteNode(String path, long zxid)
-            throws KeeperException.NoNodeException {
+    public void deleteNode(String path, long zxid) throws KeeperException.NoNodeException {
         int lastSlash = path.lastIndexOf('/');
         String parentName = path.substring(0, lastSlash);
         String childName = path.substring(lastSlash + 1);
@@ -567,9 +595,8 @@ public class DataTree {
         // but we still need to update the pzxid here before throw exception
         // for no such child
 
-        /* Get from cache */
+        /* Red Team - Get from cache */
         DataNode parent = getNode(parentName);
-        // DataNode parent = nodes.get(parentName);
 
         if (parent == null) {
             throw new KeeperException.NoNodeException();
@@ -583,24 +610,23 @@ public class DataTree {
                 parent.stat.setPzxid(zxid);
             }
 
-            /* Update parent in cache */
-            dataTreeCache.set(parentName, parent);
+            /* Red team - update parent in cache */
+            dataTreeCache.set(parentName, parent, true);
         }
 
-        /* Get from cache */
+        /* Red Team: Get from cache */
         DataNode node = getNode(path);
-        //DataNode node = nodes.get(path);
         if (node == null) {
             throw new KeeperException.NoNodeException();
         }
-        nodes.remove(path); // <--- REPLACE_WITH_PH
 
-        /* remove node from cache */
+        /* Red Team - remove node from cache */
         dataTreeCache.remove(path);
 
         synchronized (node) {
             aclCache.removeUsage(node.acl);
             nodeDataSize.addAndGet(-getNodeSize(path, node.data));
+            nodeCount--; //Red Team - decrement node count
         }
 
         // Synchronized to sync the containers and ttls change, probably
@@ -667,7 +693,7 @@ public class DataTree {
     public Stat setData(String path, byte data[], int version, long zxid,
             long time) throws KeeperException.NoNodeException {
         Stat s = new Stat();
-        DataNode n = getNode(path); //nodes.get(path);
+        DataNode n = getNode(path); //Red Team - get node from cache
 
         if (n == null) {
             throw new KeeperException.NoNodeException();
@@ -681,8 +707,8 @@ public class DataTree {
             n.stat.setVersion(version);
             n.copyStat(s);
 
-            /* add updated node to cache */
-            dataTreeCache.set(path, n);
+            /* Red Team - add updated node to cache */
+            dataTreeCache.set(path, n, true);
         }
         // now update if the path is in a quota subtree.
         String lastPrefix = getMaxPrefixWithQuota(path);
@@ -718,7 +744,7 @@ public class DataTree {
 
     public byte[] getData(String path, Stat stat, Watcher watcher)
             throws KeeperException.NoNodeException {
-        DataNode n = getNode(path); //nodes.get(path);
+        DataNode n = getNode(path); //Red Team - get the node from cache
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -734,7 +760,7 @@ public class DataTree {
     public Stat statNode(String path, Watcher watcher)
             throws KeeperException.NoNodeException {
         Stat stat = new Stat();
-        DataNode n = getNode(path); //nodes.get(path);
+        DataNode n = getNode(path); //Red Team - get the node from cache
         if (watcher != null) {
             dataWatches.addWatch(path, watcher);
         }
@@ -749,7 +775,7 @@ public class DataTree {
 
     public List<String> getChildren(String path, Stat stat, Watcher watcher)
             throws KeeperException.NoNodeException {
-        DataNode n = getNode(path); //nodes.get(path);
+        DataNode n = getNode(path); //Red Team - get the node from cache
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -766,19 +792,25 @@ public class DataTree {
         }
     }
 
+    /**
+     * Red Team - updated this method to get the node and return the number of children
+     * @param path
+     * @return
+     */
     public int getAllChildrenNumber(String path) {
         //cull out these two keys:"", "/"
         if ("/".equals(path)) {
-            return nodes.size() - 2; // <--- REPLACE_WITH_PH
+            return nodeCount - 2; //Red Team - use node count
         }
 
-        return (int)nodes.keySet().parallelStream().filter(key -> key.startsWith(path + "/")).count(); // <--- REPLACE_WITH_PH
+        //Red Team - Get the number of children for the node
+        return getNode(path).getChildren().size();
     }
 
     public Stat setACL(String path, List<ACL> acl, int version)
             throws KeeperException.NoNodeException {
         Stat stat = new Stat();
-        DataNode n = getNode(path); //nodes.get(path);
+        DataNode n = getNode(path); //Red Team - get node from cache
 
         if (n == null) {
             throw new KeeperException.NoNodeException();
@@ -794,7 +826,7 @@ public class DataTree {
 
     public List<ACL> getACL(String path, Stat stat)
             throws KeeperException.NoNodeException {
-        DataNode n = getNode(path); //nodes.get(path);
+        DataNode n = getNode(path); //Red Team - get node from cache
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -1155,7 +1187,7 @@ public class DataTree {
      *            the int count
      */
     private void getCounts(String path, Counts counts) {
-        DataNode node = getNode(path);
+        DataNode node = getNode(path); //Red Team - get node from cache
         if (node == null) {
             return;
         }
@@ -1187,7 +1219,7 @@ public class DataTree {
         strack.setBytes(c.bytes);
         strack.setCount(c.count);
         String statPath = Quotas.quotaZookeeper + path + "/" + Quotas.statNode;
-        DataNode node = getNode(statPath);
+        DataNode node = getNode(statPath); //Red Team - get node from cache
         // it should exist
         if (node == null) {
             LOG.warn("Missing quota stat node " + statPath);
@@ -1204,7 +1236,7 @@ public class DataTree {
      * @param path
      */
     private void traverseNode(String path) {
-        DataNode node = getNode(path);
+        DataNode node = getNode(path); //Red Team - get node from cache
         String children[] = null;
         synchronized (node) {
             Set<String> childs = node.getChildren();
@@ -1256,7 +1288,7 @@ public class DataTree {
      */
     void serializeNode(OutputArchive oa, StringBuilder path) throws IOException {
         String pathString = path.toString();
-        DataNode node = getNode(pathString);
+        DataNode node = getNode(pathString); //Red team - get node from cache
         if (node == null) {
             return;
         }
@@ -1300,17 +1332,31 @@ public class DataTree {
         }
     }
 
-    public void deserialize(InputArchive ia, String tag) throws IOException { // <--- REPLACE_WITH_PH
+    /**
+     * Red Team
+     *
+     * Updated to use the dataTreeCache
+     * @param ia
+     * @param tag
+     * @throws IOException
+     */
+    public void deserialize(InputArchive ia, String tag) throws IOException {
         aclCache.deserialize(ia);
-        nodes.clear();
         pTrie.clear();
-        dataTreeCache.clear();
+        dataTreeCache.clear(); //Red Team - clear dataTreeCache
         nodeDataSize.set(0);
+        nodeCount = 0; //Red Team - reset the node count
         String path = ia.readString("path");
         while (!"/".equals(path)) {
             DataNode node = new DataNode();
             ia.readRecord(node, "node");
-            nodes.put(path, node);
+
+            //Red Team - add node to dataTreeCache. If cache is full, write it to file instead of churning.
+            //Update counts and approximate size
+            dataTreeCache.set(path, node, false);
+            nodeDataSize.addAndGet(getNodeSize(path, node.data));
+            nodeCount++;
+
             synchronized (node) {
                 aclCache.addUsage(node.acl);
             }
@@ -1319,7 +1365,7 @@ public class DataTree {
                 root = node;
             } else {
                 String parentPath = path.substring(0, lastSlash);
-                DataNode parent = nodes.get(parentPath); //TODO: should we use cache here?
+                DataNode parent = getNode(parentPath); //Red Team - get node from cache
                 if (parent == null) {
                     throw new IOException("Invalid Datatree, unable to find " +
                             "parent " + parentPath + " of path " + path);
@@ -1342,10 +1388,8 @@ public class DataTree {
             }
             path = ia.readString("path");
         }
-        nodes.put("/", root);
-
-        nodeDataSize.set(approximateDataSize());
-
+        dataTreeCache.set("/", root, true); //Red Team - store root in cache
+        nodeDataSize.addAndGet(getNodeSize("/", root.data));
         // we are done with deserializing the
         // the datatree
         // update the quotas - create path trie
