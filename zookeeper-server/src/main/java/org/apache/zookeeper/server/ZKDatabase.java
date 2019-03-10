@@ -108,10 +108,7 @@ public class ZKDatabase {
 
         try{
             InputStream resourceStream = loader.getResourceAsStream("dataCache.properties");
-            LOG.error("Loaded resourceSTream");
-
             props.load(resourceStream);
-            LOG.error("Loaded resourceSTream into props");
             dataCacheSize = Integer.parseInt(props.getProperty("dataCacheSize"));
         } catch (IOException e) {
             LOG.error("There was a problem reading the dataCache.properties file. Continue with the default");

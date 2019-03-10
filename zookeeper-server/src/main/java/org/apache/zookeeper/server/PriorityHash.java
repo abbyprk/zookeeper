@@ -12,7 +12,7 @@ import java.util.concurrent.PriorityBlockingQueue;
 //******************************************************
 // CSCI 612 - Red Team
 //
-// Hassam Solano & Jake Marotta
+// Hassam Solano & Jake Marotta & Abby Parker
 //
 // PriorityHash is a caching solution for storing DataNodes and their path
 // The PriorityHash uses a ConcurrentHashMap which stores the CacheNodes
@@ -47,7 +47,7 @@ public class PriorityHash {
     private double maxSize;
     private enum ActivityType {
         GET_NODE_FROM_FILE_ADD_TO_CACHE,
-        ADD_NEW_NODE_TO_CACHE,
+        ADD_OR_UPDATE_NODE_IN_CACHE,
         ADD_NODE_TO_FILE,
         REMOVE_NODE_FROM_FILE
     }
@@ -110,17 +110,15 @@ public class PriorityHash {
     public synchronized void set(String path, DataNode node, boolean shouldCacheWhenFull) {
         CacheNode cacheNode = map.get(path);
         if (cacheNode != null) {
-            //TODO: want to make sure that we don't go over the max size
-            //Need to make sure that we don't accidentally remove our node from the queue
-            cacheNode.updateTimestamp();
-            cacheNode.setNode(node);
+            queue.remove(cacheNode);
+            processCacheDataRequest(path, node, ActivityType.ADD_OR_UPDATE_NODE_IN_CACHE); //Add node to cache, replace other nodes if cache is too full
         } else {
             cacheNode = new CacheNode(path, node);
             boolean cacheFull = size + cacheNode.getSizeInMB() > maxSize;
             if (cacheFull && !shouldCacheWhenFull) {
                 processCacheDataRequest(path, node, ActivityType.ADD_NODE_TO_FILE); //write node directly to file. Do not cache
             } else {
-                processCacheDataRequest(path, node, ActivityType.ADD_NEW_NODE_TO_CACHE); //Add node to cache, replace other nodes if cache is too full
+                processCacheDataRequest(path, node, ActivityType.ADD_OR_UPDATE_NODE_IN_CACHE); //Add node to cache, replace other nodes if cache is too full
             }
         }
     }
@@ -176,6 +174,17 @@ public class PriorityHash {
         }
     }
 
+    private synchronized void handleNodeAddWhenCacheFull(ConcurrentHashMap<String, CacheNode> fileCacheMap, CacheNode cacheNodeToAdd) {
+        boolean cacheFull = size + cacheNodeToAdd.getSizeInMB() > maxSize;
+        while (cacheFull) {
+            //Find node to replace and add it to fileCacheMap. Remove the node we are moving into cache
+            CacheNode removedNode = removeLeastRecent();
+            fileCacheMap.put(removedNode.getPath(), removedNode);
+            cacheFull = size + cacheNodeToAdd.getSizeInMB() > maxSize;
+            LOG.info("Cache was full, I deleted a node with path " + removedNode.getPath() + "... Current size is: " + size);
+        }
+    }
+
     /**
      * ProcessCacheDataRequest
      *
@@ -212,22 +221,28 @@ public class PriorityHash {
                              LOG.info("Writing node to file because we have decided to store it directly to the file rather than in cache");
                          }
                          break;
-                     case ADD_NEW_NODE_TO_CACHE:
-                         //We are trying to add a newly created node, but have to make sure that we do not go over our cache size limit
+                     case ADD_OR_UPDATE_NODE_IN_CACHE: //rename to ADD_OR_UPDATE_NODE_IN_CACHE
+                         //We are adding or updating a node but have to make sure that we do not go over our cache size limit
                          //nodeToSave should not be null.
                          if (nodeToSave != null) {
-                             CacheNode cacheNode = new CacheNode(path, nodeToSave);
-                             boolean cacheFull = size + cacheNode.getSizeInMB() > maxSize;
-                             while (cacheFull) {
-                                 //Find node to replace and add it to fileCacheMap. Remove the node we are moving into cache
-                                 CacheNode removedNode = removeLeastRecent();
-                                 fileCacheMap.put(removedNode.getPath(), removedNode);
-                                 cacheFull = size + cacheNode.getSizeInMB() > maxSize;
-                                 LOG.info("Cache was full, I deleted a node with path " + removedNode.getPath() + "... Current size is: " + size);
+                             //If the node exists in the file, work with that node
+                             CacheNode cacheNode;
+                             if (fileCacheNode != null) {
+                                 cacheNode = fileCacheNode;
+                                 cacheNode.setNode(nodeToSave);
+                                 fileCacheMap.remove(path, fileCacheNode); //remove the node from file if it exists
+                             } else {
+                                 cacheNode = new CacheNode(path, nodeToSave);
                              }
+
+                             if (size + cacheNode.getSizeInMB() > maxSize) {
+                                 handleNodeAddWhenCacheFull(fileCacheMap, cacheNode);
+                             }
+
                              map.put(path, cacheNode);
                              queue.add(cacheNode);
                              size += cacheNode.getSizeInMB();
+
                              ObjectSerializer.serialize(cacheFilePath, fileCacheMap);  //write out our updated fileCacheMap
                              LOG.info("I added a new node to cache with path " + cacheNode.getPath());
                          }
@@ -238,13 +253,10 @@ public class PriorityHash {
                          //If the fileCacheNode does not exist then we didn't actually find the node we're looking for in file.
                          if (fileCacheNode != null) {
                              //See if we can just add our node to the cache without violating size constraints
-                             boolean cacheFull = size + fileCacheNode.getSizeInMB() > maxSize;
-                             while (cacheFull) {
-                                 //Find node to replace and add it to fileCacheMap.
-                                 CacheNode removedNode = removeLeastRecent();
-                                 fileCacheMap.put(removedNode.getPath(), removedNode);
-                                 cacheFull = size + removedNode.getSizeInMB() > maxSize;
+                             if (size + fileCacheNode.getSizeInMB() > maxSize) {
+                                 handleNodeAddWhenCacheFull(fileCacheMap, fileCacheNode);
                              }
+
                              map.put(path, fileCacheNode);
                              queue.add(fileCacheNode);
                              size += fileCacheNode.getSizeInMB();
