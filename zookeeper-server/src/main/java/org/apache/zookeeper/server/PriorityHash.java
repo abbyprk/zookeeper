@@ -9,25 +9,27 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Comparator;
 import java.util.concurrent.PriorityBlockingQueue;
 
-/**
- * CSCI 612 - Red Team
- *
- * PriorityHash is a caching solution for storing DataNodes and their path
- * The PriorityHash uses a ConcurrentHashMap which stores the CacheNodes
- * and a PriorityBlockingQueue which organizes the items in the cache by timestamp.
- * The oldest CacheNode will be at the front of the queue.
- *
- * The PriorityCache is initialized with a max size in MB
- *
- * If there is a cache miss, the PriorityCache will go to a temporary file and
- * find the missing item then store it in the cache. If there is not enough room for the
- * node in cache, it will remove the least recently used items (by popping the queue) until
- * there is room in the cache for the node. The remaining nodes which are not in cache will be
- * written back to the temporary file.
- *
- * The PriorityBlockingQueue and ConcurrentHashMap were chosen so that operations are thread safe.
- * All interactions with the File are in synchronized methods.
- */
+//******************************************************
+// CSCI 612 - Red Team
+//
+// Hassam Solano & Jake Marotta
+//
+// PriorityHash is a caching solution for storing DataNodes and their path
+// The PriorityHash uses a ConcurrentHashMap which stores the CacheNodes
+// and a PriorityBlockingQueue which organizes the items in the cache by timestamp.
+// The oldest CacheNode will be at the front of the queue.
+//
+// The PriorityHash is initialized with a max size in MB
+//
+// If there is a cache miss, the PriorityHash will go to a temporary file and
+// find the missing item then store it in the cache. If there is not enough room for the
+// node in cache, it will remove the least recently used items (by popping the queue) until
+// there is room in the cache for the node. The remaining nodes which are not in cache will be
+// written back to the temporary file.
+//
+// The PriorityBlockingQueue and ConcurrentHashMap were chosen so that operations are thread safe.
+// All interactions with the File are in synchronized methods.
+//******************************************************
 public class PriorityHash {
 
     //**********************************************//

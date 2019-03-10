@@ -31,19 +31,27 @@ import org.apache.zookeeper.StatPersistedSerializable;
 import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.data.StatPersisted;
 
+// ***************************************************
+// CSCI 612 - Red Team
+//
+// Updated class to be serializable by changing class to use
+// StatPersistedSerializable instead of StatPersisted and
+// HashSet instead of Set
+//
+// Abby Parker
+// ***************************************************
+
 /**
  * This class contains the data for a node in the data tree.
  * <p>
  * A data node contains a reference to its parent, a byte array as its data, an
  * array of ACLs, a stat object, and a set of its children's paths.
- *
- * CSCI 612 - Red Team
- * Updated class to be serializable
- * Updated class to use StatPersistedSerializable instead of StatPersisted and HashSet instead of Sets
- * so that the entire class can be serialized.
  */
 @SuppressFBWarnings("EI_EXPOSE_REP2")
 public class DataNode implements Record, Serializable {
+
+    private static final long serialVersionUID = -222222L;
+
     /** the data for this datanode */
     byte data[];
 

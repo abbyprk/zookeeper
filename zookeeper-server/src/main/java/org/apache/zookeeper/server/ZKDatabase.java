@@ -52,6 +52,15 @@ import org.apache.zookeeper.txn.TxnHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+//******************************************************
+// CSCI 612 - Red Team
+//
+// Before creating a DataTree, ZKDatabase attempts to read the cache's size
+// from dataCache.properties. If it fails, the default value is -1.
+//
+// Abby Parker
+//******************************************************
+
 /**
  * This class maintains the in memory database of zookeeper
  * server states that includes the sessions, datatree and the

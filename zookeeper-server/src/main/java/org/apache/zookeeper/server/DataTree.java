@@ -69,14 +69,20 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * CSCI 612 - Red Team
- *
- * Replaced the ConcurrentHashMap that used to keep track of all the data nodes with our PriorityHash caching
- * solution.
- *
- * Changes by the red team are noted with comments
- */
+// ***************************************************
+// CSCI 612 - Red Team
+//
+// Replaced the ConcurrentHashMap that used to keep track of all
+// data nodes with our PriorityHash caching solution.
+//
+// Abby Parker
+//
+// The DataTree class maintains the tree data structure for Zookeeper. We've
+// modified this class to maintain DataNodes with a PriorityHash instead of
+// with a ConcurrentHashMap. This allows us to control how nodes are added
+// and removed from the data structure, and lets the PriorityHash decide
+// which nodes must be retrieved or stored in our cache File.
+// ***************************************************
 
 /**
  * This class maintains the tree data structure. It doesn't have any networking
