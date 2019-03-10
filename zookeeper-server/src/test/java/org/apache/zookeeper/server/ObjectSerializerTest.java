@@ -11,6 +11,13 @@ import java.util.HashMap;
 
 import static org.junit.Assert.fail;
 
+//******************************************************
+// CSCI 612 - Red Team
+//
+// Jake Marotta
+//
+// Tests the ObjectSerializer
+//******************************************************
 public class ObjectSerializerTest {
 
     @Test
