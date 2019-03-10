@@ -6,10 +6,15 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
-import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+/**
+ * CSCI 612 - Red Team
+ *
+ * Object serializer will serialize and write an object to file
+ * Object deserializer will deserialize the object written in a file
+ */
 public class ObjectSerializer {
 
     public static void serialize(Path path, Serializable object) {
@@ -28,5 +33,4 @@ public class ObjectSerializer {
         }
         return null;
     }
-
 }

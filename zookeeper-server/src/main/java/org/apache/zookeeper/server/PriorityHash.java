@@ -1,26 +1,7 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.apache.zookeeper.server;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,21 +9,40 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.Comparator;
 import java.util.concurrent.PriorityBlockingQueue;
 
+/**
+ * CSCI 612 - Red Team
+ *
+ * PriorityHash is a caching solution for storing DataNodes and their path
+ * The PriorityHash uses a ConcurrentHashMap which stores the CacheNodes
+ * and a PriorityBlockingQueue which organizes the items in the cache by timestamp.
+ * The oldest CacheNode will be at the front of the queue.
+ *
+ * The PriorityCache is initialized with a max size in MB
+ *
+ * If there is a cache miss, the PriorityCache will go to a temporary file and
+ * find the missing item then store it in the cache. If there is not enough room for the
+ * node in cache, it will remove the least recently used items (by popping the queue) until
+ * there is room in the cache for the node. The remaining nodes which are not in cache will be
+ * written back to the temporary file.
+ *
+ * The PriorityBlockingQueue and ConcurrentHashMap were chosen so that operations are thread safe.
+ * All interactions with the File are in synchronized methods.
+ */
 public class PriorityHash {
 
     //**********************************************//
     //                  ATTRIBUTES                  //
     //**********************************************//
     private static final Logger LOG = LoggerFactory.getLogger(PriorityHash.class);
-
-    private final PriorityBlockingQueue<CacheNode> queue;
-    private final ConcurrentHashMap<String, CacheNode> map;
-    private double size;
-    private double maxSize;
     private static final int QUEUE_INITIAL_CAPACITY = 20;
     private static final String CACHE_FILE_NAME = "dataTreeCache";
     private static final String CACHE_FILE_TYPE = "tmp";
+
+    private final PriorityBlockingQueue<CacheNode> queue;
+    private final ConcurrentHashMap<String, CacheNode> map;
     private Path cacheFilePath;
+    private double size;
+    private double maxSize;
     private enum ActivityType {
         GET_NODE_FROM_FILE_ADD_TO_CACHE,
         ADD_NEW_NODE_TO_CACHE,
@@ -60,7 +60,6 @@ public class PriorityHash {
         size = 0;
         this.maxSize = maxSize;
 
-        //Create our file which will hold the nodes that are not in cache. Initialize it to contain an empty hashmap
         try {
             cacheFilePath = Files.createTempFile(CACHE_FILE_NAME, CACHE_FILE_TYPE);
             ObjectSerializer.serialize(cacheFilePath, new ConcurrentHashMap<String, CacheNode>());
@@ -116,29 +115,30 @@ public class PriorityHash {
         } else {
             cacheNode = new CacheNode(path, node);
             boolean cacheFull = size + cacheNode.getSizeInMB() > maxSize;
-
             if (cacheFull && !shouldCacheWhenFull) {
-                //In this case we just want to write it to file instead of cache the node
-                processCacheDataRequest(path, node, ActivityType.ADD_NODE_TO_FILE);
+                processCacheDataRequest(path, node, ActivityType.ADD_NODE_TO_FILE); //write node directly to file. Do not cache
             } else {
-                processCacheDataRequest(path, node, ActivityType.ADD_NEW_NODE_TO_CACHE); //will add the node to cache and replace nodes if necessary
+                processCacheDataRequest(path, node, ActivityType.ADD_NEW_NODE_TO_CACHE); //Add node to cache, replace other nodes if cache is too full
             }
         }
     }
 
     /**
-     * Removes the node from cache
-     * @param path
+     * Removes node from the tree
+     *
+     * If the node is found in cache it is removed there. If it is in file then remove it
+     * from the file.
+     *
+     * @param path - path to the node
      */
     public void remove(String path) {
         CacheNode cacheNode = map.get(path);
-
-        if (cacheNode == null) {
-          processCacheDataRequest(path, null, ActivityType.REMOVE_NODE_FROM_FILE);
-        } else {
+        if (cacheNode != null) {
             map.remove(path);
             queue.remove(cacheNode);
             size -= cacheNode.getSizeInMB();
+        } else {
+            processCacheDataRequest(path, null, ActivityType.REMOVE_NODE_FROM_FILE);
         }
     }
 
@@ -192,20 +192,18 @@ public class PriorityHash {
      private synchronized void processCacheDataRequest(String path, DataNode nodeToSave, ActivityType activityType) {
          ConcurrentHashMap<String, CacheNode> fileCacheMap;
          try {
-             //If the file doesn't exist then create it.
-             if (!Files.exists(cacheFilePath)) {
+             if (Files.exists(cacheFilePath)) {
+                 fileCacheMap = (ConcurrentHashMap<String, CacheNode>) ObjectSerializer.deserialize(cacheFilePath);
+             } else {
                  cacheFilePath = Files.createTempFile(CACHE_FILE_NAME, CACHE_FILE_TYPE);
                  fileCacheMap = new ConcurrentHashMap<>();
-             } else {
-                 //Get the data from the file
-                 fileCacheMap = (ConcurrentHashMap<String, CacheNode>) ObjectSerializer.deserialize(cacheFilePath);
              }
 
              if (fileCacheMap != null) {
                  CacheNode fileCacheNode = fileCacheMap.get(path);
                  switch (activityType) {
-                     //Just add the node to the file, don't swap nodes in cache
                      case ADD_NODE_TO_FILE:
+                         //Just write the node to the file, don't touch the cache
                          if (nodeToSave != null) {
                              fileCacheMap.put(path, new CacheNode(path, nodeToSave));
                              ObjectSerializer.serialize(cacheFilePath, fileCacheMap);
@@ -225,13 +223,11 @@ public class PriorityHash {
                                  cacheFull = size + cacheNode.getSizeInMB() > maxSize;
                                  LOG.info("Cache was full, I deleted a node with path " + removedNode.getPath() + "... Current size is: " + size);
                              }
-
-                             //Now we can add the node to cache
                              map.put(path, cacheNode);
                              queue.add(cacheNode);
                              size += cacheNode.getSizeInMB();
                              ObjectSerializer.serialize(cacheFilePath, fileCacheMap);  //write out our updated fileCacheMap
-                             LOG.error("I added a new node to cache with path " + cacheNode.getPath());
+                             LOG.info("I added a new node to cache with path " + cacheNode.getPath());
                          }
                          break;
                      case GET_NODE_FROM_FILE_ADD_TO_CACHE:
@@ -241,15 +237,12 @@ public class PriorityHash {
                          if (fileCacheNode != null) {
                              //See if we can just add our node to the cache without violating size constraints
                              boolean cacheFull = size + fileCacheNode.getSizeInMB() > maxSize;
-
                              while (cacheFull) {
                                  //Find node to replace and add it to fileCacheMap.
                                  CacheNode removedNode = removeLeastRecent();
                                  fileCacheMap.put(removedNode.getPath(), removedNode);
                                  cacheFull = size + removedNode.getSizeInMB() > maxSize;
                              }
-
-                             //Now we can add the node to cache
                              map.put(path, fileCacheNode);
                              queue.add(fileCacheNode);
                              size += fileCacheNode.getSizeInMB();
@@ -257,7 +250,6 @@ public class PriorityHash {
                              //Remove the node that we're caching from the fileCacheMap and then write the updated map to file
                              fileCacheMap.remove(path, fileCacheNode);
                              ObjectSerializer.serialize(cacheFilePath, fileCacheMap);
-
                              LOG.info("There was a cache miss. I just got the node " + fileCacheNode.getPath() + " from file and put it in cache");
                          } else {
                              LOG.warn("Could not find the requested node in cache or in the file.");

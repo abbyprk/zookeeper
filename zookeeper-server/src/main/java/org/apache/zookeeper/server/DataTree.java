@@ -16,11 +16,6 @@
  * limitations under the License.
  */
 
- /*
-FOR REDTEAM
-Find places to replace native concurrent HashMap with PriorityHash : REPLACE_WITH_PH
- */
-
 package org.apache.zookeeper.server;
 
 import org.apache.jute.InputArchive;
@@ -75,13 +70,19 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
+ * CSCI 612 - Red Team
+ *
+ * Replaced the ConcurrentHashMap that used to keep track of all the data nodes with our PriorityHash caching
+ * solution.
+ *
+ * Changes by the red team are noted with comments
+ */
+
+/**
  * This class maintains the tree data structure. It doesn't have any networking
  * or client connection code in it so that it can be tested in a stand alone
  * way.
  * <p>
- * The tree maintains two parallel data structures: a hashtable that maps from
- * full paths to DataNodes and a tree of DataNodes. All accesses to a path is
- * through the hashtable. The tree is traversed only when serializing to disk.
  */
 public class DataTree {
     private static final Logger LOG = LoggerFactory.getLogger(DataTree.class);
@@ -219,21 +220,15 @@ public class DataTree {
     }
 
     /**
-     * Red Team
+     * CSCI 612 -Red Team
      *
-     * We are keeping track of the data size instead of calculating it each time.
+     * We are keeping track of the data size for the whole tree as we add or remove nodes
+     * instead of calculating it each time by traversing the nodes.
+     *
      * @return size of the data
      */
    public long approximateDataSize() {
         return cachedApproximateDataSize();
-        /*long result = 0;
-        for (Map.Entry<String, DataNode> entry : nodes.entrySet()) { // <--- REPLACE_WITH_PH
-            DataNode value = entry.getValue();
-            synchronized (value) {
-                result += getNodeSize(entry.getKey(), value.data);
-            }
-        }
-        return result;*/
     }
 
     /**
@@ -269,21 +264,23 @@ public class DataTree {
         this(-1); //Will use the default maxNodeDataCache
     }
 
+    /**
+     * CSCI 612 - Red Team
+     *
+     * Update to use cache instead of nodes HashMap
+     * Update the nodeDataSize and nodeCount as we add the nodes
+     * The cacheSize can be initialized with the dataCacheSize param.
+     * To take the default size use -1
+     *
+     * @param dataCacheSize - Cache size in MB (if value is less than 0 it will use the default)
+     */
     public DataTree(int dataCacheSize) {
-        /* Initialize cache */
+        /* Red Team - Initialize cache */
         dataTreeCache = new PriorityHash(dataCacheSize > 0 ? dataCacheSize : maxNodeDataCacheMB);
-
-        /**
-         * RED Team
-         *
-         * Update to use cache instead of nodes
-         * Update the nodeDataSize as we add the nodes
-         */
 
         /* Rather than fight it, let root have an alias */
         dataTreeCache.set("", root, true);
         nodeDataSize.set(getNodeSize("", root.data));
-
         dataTreeCache.set(rootZookeeper, root, true);
         nodeDataSize.addAndGet(getNodeSize(rootZookeeper, root.data));
         nodeCount+= 2;
@@ -315,16 +312,14 @@ public class DataTree {
      * zookeeper
      */
     public void addConfigNode() {
-        DataNode zookeeperZnode = getNode(procZookeeper); //nodes.get(procZookeeper);
+        DataNode zookeeperZnode = getNode(procZookeeper); //Red Team - get node from cache
         if (zookeeperZnode != null) { // should always be the case
             zookeeperZnode.addChild(configChildZookeeper);
         } else {
             assert false : "There's no /zookeeper znode - this should never happen.";
         }
 
-        /**
-         * Red Team - config child node to cache and update nodeDataSize
-         */
+        /* Red Team - config child node to cache and update nodeDataSize*/
         DataNode configChildZKNode = new DataNode(new byte[0], -1L, new StatPersistedSerializable());
         dataTreeCache.set(configChildZookeeper, configChildZKNode, true);
         nodeDataSize.addAndGet(getNodeSize(configChildZookeeper, configChildZKNode.data));
@@ -518,11 +513,12 @@ public class DataTree {
             parent.addChild(childName);
             nodeDataSize.addAndGet(getNodeSize(path, child.data));
 
-            /** RED Team
+            /*
+             * CSCI 612 - RED Team
              * - add node to dataTreeCache
              * - update parent
              * - Add to total size and node count
-             * **/
+             */
             dataTreeCache.set(parentName, parent, true);
             dataTreeCache.set(path, child, true);
             nodeCount++;
@@ -589,9 +585,7 @@ public class DataTree {
         // but we still need to update the pzxid here before throw exception
         // for no such child
 
-        /* Red Team - Get from cache */
-        DataNode parent = getNode(parentName);
-
+        DataNode parent = getNode(parentName); //Red Team - Get node from cache
         if (parent == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -603,20 +597,14 @@ public class DataTree {
             if (zxid > parent.stat.getPzxid()) {
                 parent.stat.setPzxid(zxid);
             }
-
-            /* Red team - update parent in cache */
-            dataTreeCache.set(parentName, parent, true);
+            dataTreeCache.set(parentName, parent, true); //Red Team - update parent in cache
         }
 
-        /* Red Team: Get from cache */
-        DataNode node = getNode(path);
+        DataNode node = getNode(path); //Red Team - get node from cache
         if (node == null) {
             throw new KeeperException.NoNodeException();
         }
-
-        /* Red Team - remove node from cache */
-        dataTreeCache.remove(path);
-
+        dataTreeCache.remove(path); //Red Team - remove node from cache
         synchronized (node) {
             aclCache.removeUsage(node.acl);
             nodeDataSize.addAndGet(-getNodeSize(path, node.data));
@@ -688,7 +676,6 @@ public class DataTree {
             long time) throws KeeperException.NoNodeException {
         Stat s = new Stat();
         DataNode n = getNode(path); //Red Team - get node from cache
-
         if (n == null) {
             throw new KeeperException.NoNodeException();
         }
@@ -700,9 +687,7 @@ public class DataTree {
             n.stat.setMzxid(zxid);
             n.stat.setVersion(version);
             n.copyStat(s);
-
-            /* Red Team - add updated node to cache */
-            dataTreeCache.set(path, n, true);
+            dataTreeCache.set(path, n, true); //Red Team - set updated node in cache
         }
         // now update if the path is in a quota subtree.
         String lastPrefix = getMaxPrefixWithQuota(path);
@@ -797,7 +782,7 @@ public class DataTree {
             return nodeCount - 2; //Red Team - use node count
         }
 
-        //Red Team - Get the number of children for the node
+        //Red Team - Get the number of children for the node instead of checking the tree
         return getNode(path).getChildren().size();
     }
 
@@ -1383,7 +1368,8 @@ public class DataTree {
             path = ia.readString("path");
         }
         dataTreeCache.set("/", root, true); //Red Team - store root in cache
-        nodeDataSize.addAndGet(getNodeSize("/", root.data));
+        nodeDataSize.addAndGet(getNodeSize("/", root.data)); //Red Team - add the size of the root node
+
         // we are done with deserializing the
         // the datatree
         // update the quotas - create path trie

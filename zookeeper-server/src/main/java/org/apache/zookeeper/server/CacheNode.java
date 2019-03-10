@@ -1,19 +1,9 @@
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * CSCI 612 - Red Team
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Cache Node keeps track of the DataNode and the path to the node within the tree.
+ * Cache node contains a timestamp which indicates when the node was last referenced or updated.
+ * The node is serializable
  */
 package org.apache.zookeeper.server;
 
@@ -54,8 +44,8 @@ public class CacheNode implements Serializable {
     }
 
     /**
-     * Gets the number of MB for the path and data in the D
-     * We are ignoring the other fields on the DataNode.
+     * Gets the number of MB for the path and data in the DataNode
+     * @return size of data and path in MB
      */
     double getSizeInMB() {
         double pathSize = path == null ? 0 : path.getBytes().length;

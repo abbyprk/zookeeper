@@ -24,7 +24,6 @@ import java.io.Serializable;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Collections;
-
 import org.apache.jute.InputArchive;
 import org.apache.jute.OutputArchive;
 import org.apache.jute.Record;
@@ -32,13 +31,16 @@ import org.apache.zookeeper.StatPersistedSerializable;
 import org.apache.zookeeper.data.Stat;
 import org.apache.zookeeper.data.StatPersisted;
 
-
 /**
  * This class contains the data for a node in the data tree.
  * <p>
  * A data node contains a reference to its parent, a byte array as its data, an
  * array of ACLs, a stat object, and a set of its children's paths.
- * 
+ *
+ * CSCI 612 - Red Team
+ * Updated class to be serializable
+ * Updated class to use StatPersistedSerializable instead of StatPersisted and HashSet instead of Sets
+ * so that the entire class can be serialized.
  */
 @SuppressFBWarnings("EI_EXPOSE_REP2")
 public class DataNode implements Record, Serializable {
@@ -60,9 +62,9 @@ public class DataNode implements Record, Serializable {
      * does not contain the parent path -- just the last part of the path. This
      * should be synchronized on except deserializing (for speed up issues).
      */
-    private HashSet<String> children = null; //Red Team: Change to hashset so that it will be serializable
+    private HashSet<String> children = null; //Red Team: Change to Hashset so that it will be serializable
 
-    private static final HashSet<String> EMPTY_SET = new HashSet<>(); //Red Team: change to hashset so that it will be serializable
+    private static final HashSet<String> EMPTY_SET = new HashSet<>(); //Red Team: change to Hashset so that it will be serializable
 
     /**
      * default constructor for the datanode
